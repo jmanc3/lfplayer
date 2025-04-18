@@ -20,7 +20,6 @@
 #include "search_menu.h"
 #include "systray.h"
 #include "volume_menu.h"
-#include "wifi_menu.h"
 #include "windows_selector.h"
 #include "hsluv.h"
 #include "globals.h"
@@ -2947,7 +2946,7 @@ clicked_wifi(AppClient *client, cairo_t *cr, Container *container) {
     auto *data = (IconButton *) container->user_data;
     if (!data->invalid_button_down) {
         if (config->wifi_command.empty()) {
-            start_wifi_menu();
+            //start_wifi_menu();
         } else {
             launch_command(config->wifi_command);
         }
@@ -3660,42 +3659,6 @@ clicked_super(AppClient *client, cairo_t *cr, Container *container) {
 }
 
 static void
-paint_wifi(AppClient *client, cairo_t *cr, Container *container) {
-#ifdef TRACY_ENABLE
-    ZoneScoped;
-#endif
-    Bounds start = container->real_bounds;
-    container->real_bounds.x += 1;
-    container->real_bounds.y += 1;
-    container->real_bounds.w -= 2;
-    container->real_bounds.h -= 2;
-    paint_hoverable_button_background(client, cr, container);
-    container->real_bounds = start;
-    
-    bool up = false;
-    bool wired = false;
-    wifi_state(client, &up, &wired);
-    
-    // from https://docs.microsoft.com/en-us/windows/apps/design/style/segoe-ui-symbol-font
-    std::string text;
-    if (up) {
-        if (wired) {
-            text = "\uE839";
-        } else {
-            text = "\uEC3F";
-        }
-    } else {
-        if (wired) {
-            text = "\uF384";
-        } else {
-            text = "\uEB5E";
-        }
-    }
-    
-    draw_text(client, 12 * config->dpi, config->icons, EXPAND(config->color_taskbar_button_icons), text, container->real_bounds);
-}
-
-static void
 fill_root(App *app, AppClient *client, Container *root) {
 #ifdef TRACY_ENABLE
     ZoneScoped;
@@ -3814,7 +3777,6 @@ fill_root(App *app, AppClient *client, Container *root) {
     button_bluetooth->when_clicked = clicked_bluetooth;
     button_bluetooth->name = "bluetooth";
     
-    button_wifi->when_paint = paint_wifi;
     button_wifi->when_clicked = clicked_wifi;
     button_wifi->name = "wifi";
     auto wifi_data = new IconButton;

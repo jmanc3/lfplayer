@@ -721,7 +721,7 @@ App *app_new() {
     
     xcb_flush(app->connection);
     
-    /* Query framebuffer configurations that match visual_attribs */
+    /*
     int fb_configs_count;
     fb_configs_count = 0;
     app->fb_configs = glXChooseFBConfig(display, default_screen, visual_attribs, &fb_configs_count);
@@ -750,12 +750,10 @@ App *app_new() {
         return nullptr;
     }
     
-    /* Select first framebuffer config and query visualID */
     int visualID;
     visualID = app->visual->visualid;
     glXGetFBConfigAttrib(display, app->chosen_config, GLX_VISUAL_ID, &visualID);
     
-    /* Create OpenGL context */
     app->version_check_context = glXCreateNewContext(display, app->chosen_config, GLX_RGBA_TYPE, 0, True);
     if (!app->version_check_context) {
         fprintf(stderr, "glXCreateNewContext failed\n");
@@ -791,14 +789,14 @@ App *app_new() {
             | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
             values
     );
+    */
     
     // NOTE: client must be mapped before glXMakeContextCurrent
     // DOUBLE_NOTE: Who said the above? It doesn't seem to be the case in fact. But maybe it is.
     // I asked gpt and after a lot of prompting it said the window doesn't have to be mapped.
 //    xcb_map_window(connection, window);
     
-    /* Create GLX Window */
-    GLXWindow gl_window;
+    /*GLXWindow gl_window;
     gl_window = glXCreateWindow(display, app->chosen_config, window, 0);
     if (!window) {
         xcb_destroy_window(connection, window);
@@ -809,7 +807,6 @@ App *app_new() {
     
     GLXDrawable drawable;
     drawable = gl_window;
-    /* make OpenGL context current */
     if (!glXMakeContextCurrent(display, drawable, drawable, app->version_check_context)) {
         xcb_destroy_window(connection, window);
         fprintf(stderr, "glXMakeContextCurrent failed\n");
@@ -823,17 +820,14 @@ App *app_new() {
         return nullptr;
     }
     
-    /**
-     * Do minimum checks (although basically every modern system will have all these extensions)
-     */
-    // Check GL Version
     if (!GLEW_VERSION_3_3) {
         xcb_destroy_window(connection, window);
         fprintf(stderr, "OpenGL 3.3 not supported\n");
         delete app;
         return nullptr;
     }
-    
+    */
+
     poll_descriptor(app, xcb_get_file_descriptor(app->connection), POLLIN, xcb_poll_wakeup, nullptr, "XCB");
     
     auto atom_cookie = xcb_intern_atom(app->connection, 1, strlen("WM_PROTOCOLS"), "WM_PROTOCOLS");
@@ -857,11 +851,11 @@ App *app_new() {
     get_raw_motion_and_scroll_events(app);
     
     // free stuff
-    xcb_free_colormap(connection, colormap);
-    xcb_destroy_window(connection, window);
-    glXDestroyContext(display, app->version_check_context);
+    //xcb_free_colormap(connection, colormap);
+    //xcb_destroy_window(connection, window);
+    //glXDestroyContext(display, app->version_check_context);
     app->version_check_context = nullptr;
-    glXMakeContextCurrent(display, None, None, nullptr);
+    //glXMakeContextCurrent(display, None, None, nullptr);
     
     return app;
 }
@@ -944,18 +938,18 @@ client_new(App *app, Settings settings, const std::string &name) {
         }
     }
     
-//    uint8_t depth = settings.window_transparent ? 32 : 24;
-//    xcb_visualtype_t *visual = xcb_aux_find_visual_by_attrs(
-//            screen,
-//            -1,
-//            depth
-//    );
+   uint8_t depth = settings.window_transparent ? 32 : 24;
+   xcb_visualtype_t *visual = xcb_aux_find_visual_by_attrs(
+           screen,
+           -1,
+           depth
+   );
     xcb_colormap_t colormap = xcb_generate_id(app->connection);
     xcb_create_colormap(
             app->connection,
             XCB_COLORMAP_ALLOC_NONE,
             colormap, app->screen->root,
-            app->visual->visualid
+            visual->visual_id
     );
     
     const uint32_t values[] = {
@@ -979,13 +973,13 @@ client_new(App *app, Settings settings, const std::string &name) {
     /* Create a window */
     xcb_window_t window = xcb_generate_id(app->connection);
     xcb_create_window(app->connection,
-                      app->visual->depth,
+                      depth,
                       window,
                       app->screen->root,
                       settings.x, settings.y, settings.w, settings.h,
                       0,
                       XCB_WINDOW_CLASS_INPUT_OUTPUT,
-                      app->visual->visualid,
+                      visual->visual_id,
                       XCB_CW_BACK_PIXEL | XCB_CW_BORDER_PIXEL
                       | XCB_CW_OVERRIDE_REDIRECT
                       | XCB_CW_EVENT_MASK | XCB_CW_COLORMAP,
@@ -1028,29 +1022,6 @@ client_new(App *app, Settings settings, const std::string &name) {
                             XCB_PROP_MODE_APPEND,
                             window,
                             get_cached_atom(app, "_NET_WM_STATE_STICKY"),
-                            XCB_ATOM_ATOM,
-                            32,
-                            1,
-                            &atom);
-    }
-    
-    // This is so we don't show up on our own taskbar
-    if (settings.skip_taskbar) {
-        xcb_atom_t atom = get_cached_atom(app, "_NET_WM_STATE_SKIP_TASKBAR");
-        xcb_change_property(app->connection,
-                            XCB_PROP_MODE_APPEND,
-                            window,
-                            get_cached_atom(app, "_NET_WM_STATE"),
-                            XCB_ATOM_ATOM,
-                            32,
-                            1,
-                            &atom);
-
-        atom = get_cached_atom(app, "_NET_WM_STATE_SKIP_PAGER");
-        xcb_change_property(app->connection,
-                            XCB_PROP_MODE_APPEND,
-                            window,
-                            get_cached_atom(app, "_NET_WM_STATE"),
                             XCB_ATOM_ATOM,
                             32,
                             1,
@@ -1127,6 +1098,7 @@ client_new(App *app, Settings settings, const std::string &name) {
     
     // strut (a.k.a what part we want to reserve for ourselves)
     if (settings.reserve_side) {
+        /*
         xcb_ewmh_wm_strut_partial_t wm_strut = {};
         
         auto height = screen->height_in_pixels - primary_screen_info->height_in_pixels + settings.reserve_bottom;
@@ -1143,6 +1115,7 @@ client_new(App *app, Settings settings, const std::string &name) {
                               settings.reserve_right,
                               settings.reserve_top,
                               settings.reserve_bottom);
+*/
     }
     
     if (settings.slide) {
@@ -1157,9 +1130,10 @@ client_new(App *app, Settings settings, const std::string &name) {
                             &settings.slide_data);
     }
     
-    // Set the WM_CLASS
+        // Set the WM_CLASS
+    std::string wm_class = name + '\0' + name;
     auto set_wm_class_cookie = xcb_icccm_set_wm_class_checked(app->connection, window,
-                                                              name.length(), name.c_str());
+                                                                  wm_class.size(), wm_class.c_str());
     xcb_generic_error_t *error = xcb_request_check(app->connection, set_wm_class_cookie);
     if (error) {
         printf("Couldn't set the WM_CLASS property for client: %s\n", name.c_str());
@@ -1195,6 +1169,7 @@ client_new(App *app, Settings settings, const std::string &name) {
     
     init_xkb(app, client);
     
+    /*
     client->gl_window = glXCreateWindow(client->app->display, client->app->chosen_config, client->window, 0);
     if (!client->window) {
         fprintf(stderr, "glXCreateWindow failed\n");
@@ -1202,7 +1177,6 @@ client_new(App *app, Settings settings, const std::string &name) {
     }
     client->gl_drawable = client->gl_window;
     
-    /* Create OpenGL context */
     client->context = glXCreateNewContext(client->app->display, client->app->chosen_config, GLX_RGBA_TYPE, 0, True);
     if (!client->context) {
         glXDestroyContext(client->app->display, client->context);
@@ -1212,15 +1186,16 @@ client_new(App *app, Settings settings, const std::string &name) {
         glXDestroyContext(client->app->display, client->context);
         fprintf(stderr, "glXMakeContextCurrent failed\n");
     }
+    */
     
     if (!client->ctx) {
         client->ctx = new DrawContext;
-        client->ctx->buffer = new OffscreenFrameBuffer(client->bounds->w, client->bounds->h);
+        //client->ctx->buffer = new OffscreenFrameBuffer(client->bounds->w, client->bounds->h);
         client->should_use_gl = winbar_settings->use_opengl;
     }
     
     // vsync off
-    glXSwapIntervalEXT(client->app->display, client->gl_drawable, 0);
+    //glXSwapIntervalEXT(client->app->display, client->gl_drawable, 0);
     
     app->clients.push_back(client);
     
@@ -1495,8 +1470,6 @@ void client_close(App *app, AppClient *client) {
     client->animations.shrink_to_fit();
     
     xcb_unmap_window(app->connection, client->window);
-    glXDestroyWindow(app->display, client->gl_window);
-    glXDestroyContext(app->display, client->context);
     xcb_destroy_window(app->connection, client->window);
     xcb_flush(app->connection);
     

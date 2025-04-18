@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-set(project_name winbar)
+set(project_name lfplayer)
 project(${project_name})
 
 set(CMAKE_CXX_STANDARD 17) ## or 14 !!
@@ -13,9 +13,6 @@ file(GLOB SOURCES src/*.cpp)
 
 include_directories(lib)
 file(GLOB LIB lib/*.cpp lib/*.h)
-
-include_directories(wpa_ctrl)
-file(GLOB WPA_CTRL wpa_ctrl/*.c wpa_ctrl/*.h)
 
 option(PROFILE "Enable tracy profiling instrumentation" False)
 #set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS}" -fsanitize=address) ## on g++ this ensures: -std=c++11 and not -std=gnu++11
@@ -31,7 +28,7 @@ if (PROFILE)
     # run git clone https://github.com/wolfpld/tracy.git if you want to do this
     add_definitions(-DTRACY_ENABLE)
     add_subdirectory(tracy)
-    add_executable(${project_name} ${HEADERS} ${SOURCES} ${LIB} ${WPA_CTRL} tracy/public/TracyClient.cpp)
+    add_executable(${project_name} ${HEADERS} ${SOURCES} src/miniaudio.hh ${LIB} tracy/public/TracyClient.cpp)
 
     set(DL_LIB dl)
     set(PTHREAD_LIB pthread)
@@ -39,7 +36,7 @@ if (PROFILE)
     target_link_libraries(${project_name} PUBLIC Tracy::TracyClient)
 else ()
     # otherwise just compile
-    add_executable(${project_name} ${HEADERS} ${SOURCES} ${LIB} ${WPA_CTRL})
+    add_executable(${project_name} ${HEADERS} ${SOURCES} src/miniaudio.hh ${LIB})
 endif ()
 
 find_package(PkgConfig)
@@ -95,6 +92,7 @@ set(
         xrender
         gl
         glew
+        taglib
 )
 
 find_package(glm REQUIRED)

@@ -653,12 +653,9 @@ void audio_read(const std::function<void()> &callback) {
     callback();
 }
 
-static bool opened = false;
-
 void meter_watching_start() {
     if (!winbar_settings->meter_animations)
         return;
-    opened = true;
 #ifdef  TRACY_ENABLE
     ZoneScoped;
 #endif
@@ -694,9 +691,8 @@ void meter_watching_start() {
 void meter_watching_stop() {
     if (!winbar_settings->meter_animations)
         return;
-    if (!opened)
+    if (!winbar_settings->meter_minimal)
         return;
-    opened = false;
 #ifdef  TRACY_ENABLE
     ZoneScoped;
 #endif

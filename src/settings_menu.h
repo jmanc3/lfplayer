@@ -45,6 +45,7 @@ struct WinbarSettings {
     bool custom_desktops_directory_exclusive = false;
     bool ignore_only_show_in = true;
     bool meter_animations = true;
+    bool meter_minimal = true;
     bool labels = false;
     bool super_icon_default = true;
     bool label_uniform_size = false;

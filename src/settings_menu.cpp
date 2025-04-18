@@ -1696,6 +1696,8 @@ fill_root(AppClient *client, Container *root) {
     setting_subheading(scroll_root, "General");
     
     setting_bool(scroll_root, "\uE767", "Animated volume playback", "Shows the meter of audio clients", &winbar_settings->meter_animations);
+    setting_bool_attachment(scroll_root, "", "Receive events only if volume menu is open (can cause crashes)", "", &winbar_settings->meter_minimal, &winbar_settings->meter_animations, false);
+
     scroll_root->child(FILL_SPACE, 4.5 * config->dpi);
 
     setting_bool(scroll_root, "\uEDFB", "Use OpenGL", "Switch off cairo backend for experimental OpenGL backend", &winbar_settings->use_opengl);
@@ -1998,6 +2000,9 @@ void save_settings_file() {
     out_file << "meter_animations=" << (winbar_settings->meter_animations ? "true" : "false");
     out_file << std::endl << std::endl;
     
+    out_file << "meter_minimal=" << (winbar_settings->meter_minimal ? "true" : "false");
+    out_file << std::endl << std::endl;
+    
     out_file << "super_icon_default=" << (winbar_settings->super_icon_default ? "true" : "false");
     out_file << std::endl << std::endl;
     
@@ -2277,6 +2282,7 @@ void read_settings_file() {
                            &winbar_settings->custom_desktops_directory_exclusive);
                 parse_bool(&parser, key, "ignore_only_show_in", &winbar_settings->ignore_only_show_in);
                 parse_bool(&parser, key, "meter_animations", &winbar_settings->meter_animations);
+                parse_bool(&parser, key, "meter_minimal", &winbar_settings->meter_minimal);
                 parse_bool(&parser, key, "super_icon_default", &winbar_settings->super_icon_default);
                 parse_bool(&parser, key, "labels", &winbar_settings->labels);
                 parse_bool(&parser, key, "label_uniform_size", &winbar_settings->label_uniform_size);

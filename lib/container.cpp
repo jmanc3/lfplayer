@@ -116,7 +116,7 @@ single_filler_height(Container *container) {
     if (available_h > 0) {
         double filler_children_count = 0;
         for (auto child: container->children) {
-            if (child->wanted_bounds.h == FILL_SPACE) {
+            if (child->wanted_bounds.h == FILL_SPACE && child->exists) {
                 filler_children_count++;
             }
         }
@@ -289,7 +289,7 @@ single_filler_width(Container *container, const Bounds bounds) {
         double filler_children_count = 0;
         for (auto child: container->children) {
             if (child) {
-                if (child->wanted_bounds.w == FILL_SPACE) {
+                if (child->wanted_bounds.w == FILL_SPACE && child->exists) {
                     filler_children_count++;
                 }
             }
@@ -644,6 +644,10 @@ void layout_newscrollpane_content(AppClient *client, cairo_t *cr, ScrollContaine
         h = true_height(scroll->content);
     }
     
+    if (scroll->content && scroll->content->pre_layout) {
+        scroll->content->pre_layout(client, scroll->content, Bounds(bounds.x + scroll->scroll_h_visual, bounds.y + scroll->scroll_v_visual, w, h));
+    }
+
     layout(client, cr, scroll->content,
            Bounds(bounds.x + scroll->scroll_h_visual, bounds.y + scroll->scroll_v_visual, w, h));
     
@@ -1174,6 +1178,7 @@ void AppClient::gl_clear() {
 }
 
 RoundedRect::RoundedRect() {
+    return;
     vertexShaderSource = R"(
 #version 330 core
 
@@ -1503,6 +1508,7 @@ void ShapeRenderer::set_color(glm::vec4 top_left_rgba, glm::vec4 top_right_rgba,
 // We now allocate enough space for 4 vertices, each with 8 floats.
 //
 void ShapeRenderer::initialize() {
+    return;
     // Compile shaders and create shader program.
     GLuint vertexShader = compileShader(vertexShaderSource, GL_VERTEX_SHADER);
     GLuint fragmentShader = compileShader(fragmentShaderSource, GL_FRAGMENT_SHADER);
@@ -1574,7 +1580,7 @@ ImmediateTexture::ImmediateTexture(const char *filename, int w, int h, bool keep
         if (w <= 0 || h <= 0) {
             auto handle = rsvg_handle_new_from_file(filename, nullptr);
             assert(handle);
-            pixbuf = rsvg_handle_get_pixbuf(handle);
+            pixbuf = rsvg_handle_get_pixbuf_and_error(handle, nullptr);
         } else {
             pixbuf = gdk_pixbuf_new_from_file_at_scale(filename, w, h, keep_aspect_ratio, nullptr);
         }
@@ -1688,7 +1694,7 @@ ImageData ImmediateTexture::get(const char *filename, int w, int h, bool keep_as
         if (w <= 0 || h <= 0) {
             auto handle = rsvg_handle_new_from_file(filename, nullptr);
             assert(handle);
-            pixbuf = rsvg_handle_get_pixbuf(handle);
+            pixbuf = rsvg_handle_get_pixbuf_and_error(handle, nullptr);
         } else {
             pixbuf = gdk_pixbuf_new_from_file_at_scale(filename, w, h, keep_aspect_ratio, nullptr);
         }

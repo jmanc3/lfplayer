@@ -68,11 +68,16 @@ void fine_scrollpane_scrolled(AppClient *client,
     if (reply->mods & XKB_KEY_Shift_L || reply->mods & XKB_KEY_Control_L) {
         container->scroll_h_real += scroll_x + scroll_y;
     } else {
-        container->scroll_h_real += scroll_x;
-        container->scroll_v_real += scroll_y;
+        if (!came_from_touchpad) {
+            container->scroll_h_real += scroll_x;
+            container->scroll_v_real += scroll_y;
+        } else {
+            container->scroll_h_real += scroll_x;
+            container->scroll_v_real += scroll_y;
+        }
     }
 //#define SCALE 1.8
-#define SCALE 1.45
+#define SCALE 1.0
     
     if (container->type == newscroll && !came_from_touchpad) {
         auto *scroll = (ScrollContainer *) container;
@@ -110,7 +115,7 @@ void fine_scrollpane_scrolled(AppClient *client,
                         if (item.value == visual) {
                             item.start_value = *item.value;
                             item.easing = getEasingFunction(EaseOutQuad);
-                            item.length = 130 * SCALE;
+                            item.length = 100 * SCALE;
                             item.start_time = current;
                         }
                     }
@@ -120,7 +125,7 @@ void fine_scrollpane_scrolled(AppClient *client,
         scroll->previous_delta_diff = ms_between_scroll;
        
         easingFunction ease = nullptr;
-        auto scalar = ((double) std::abs(7.5 - scroll->scroll_count)) / 7.5;
+        auto scalar = ((double) std::abs(10.5 - scroll->scroll_count)) / 10.5;
         if (scalar < 1) {
             scalar = 0;
         } else {
@@ -1484,6 +1489,9 @@ paint_textarea(AppClient *client, cairo_t *cr, Container *container) {
     set_argb(cr, data->color);
     
     //cairo_move_to(cr, container->real_bounds.x, container->real_bounds.y);
+    
+    // TODO: this 0, 0 position is wrong for cairo and makes is draw the cursor in the wrong spot
+    // The problem is that the texts are different widths
     draw_text(client, data->font_size, config->font, EXPAND(data->color), data->state->text, container->real_bounds, 5, 0, 0);
     
     //pango_cairo_show_layout(cr, layout);
