@@ -1,15 +1,15 @@
-# Winbar
+# LFPlayer 
 
-A familiar X11 panel/dock to ease new linux users transition
+A local first music player
 
-https://user-images.githubusercontent.com/25911177/154002452-446eb086-9453-480a-bb70-4703b500946b.mp4
+![Screenshot](screenshot.png)
 
 ## Packages required for building
 
 * Void Linux
 
 ```bash
-sudo xbps-install -S git gcc cmake make pkg-config pango-devel cairo-devel librsvg-devel libxcb-devel xcb-util-devel pulseaudio-devel xcb-util-wm-devel libxkbcommon-devel libxkbcommon-x11 libconfig++-devel xcb-util-keysyms-devel xcb-util-image-devel xcb-util-cursor-devel dbus-devel fontconfig-devel alsa-lib-devel papirus-icon-theme lxappearance unzip glew-devel glm
+sudo xbps-install -S git gcc cmake make pkg-config pango-devel cairo-devel librsvg-devel libxcb-devel xcb-util-devel pulseaudio-devel xcb-util-wm-devel libxkbcommon-devel libxkbcommon-x11 libconfig++-devel xcb-util-keysyms-devel xcb-util-image-devel xcb-util-cursor-devel dbus-devel fontconfig-devel alsa-lib-devel papirus-icon-theme lxappearance unzip glew-devel glm taglib-devel
 ```
 
 * Arch Linux
@@ -38,46 +38,25 @@ sudo yum install git cmake g++ cairo-devel pango-devel librsvg2-devel xcb-util-d
 
 ## Installation
 
-* Download the source and enter the folder
+* Download the source and enter the folder:
 
 ```bash
 git clone https://github.com/jmanc3/winbar
 cd winbar
 ```
 
-* Run the install script.
+* Build using cmake and make:
 
 ```bash
-./install.sh
-``` 
+mkdir release
+cd release
+cmake -DCMAKE_BUILD_TYPE=Release ../
+make -j 16
+sudo make install
+```
+
+That will install 'lfp' to /usr/local/bin/lfp.
 
 If compilation fails, it should tell you what headers are missing and you can look up what you need to install for your
 distribution to get that library.
 
-## Changes you might want to make
-
-* Not every setting from the legacy winbar.cfg has been ported to the new system yet (although eventually they will be), so, if you want to make those changes meanwhile, copy '/etc/winbar.cfg' into '$HOME/.config/winbar/winbar.cfg', and make the modifications you'd like.
-
-## Recommended Setup
-
-Winbar is just a taskbar. You'll need to run it on a desktop environment or windows manager. The recommended desktop environment is KDE Plasma (kwin) because it allows winbar access to features it wouldn't otherwise have: Slide animations when menu's open, window preview on hovering a thumbnail, working 'Sign out'/'Shutdown'/'Restart' buttons, and (if you activate 'blur' in your KDE settings) a nice blur which is close to 'acrylic.'
-
-To autostart winbar with your computer, do the following:
-
-```bash
-mkdir -p ~/.config/autostart/
-```
-
-And then, inside that folder, write the following, and save it as 'winbar.desktop': 
-
-```bash
-[Desktop Entry]
-Exec=winbar
-Icon=
-Name=winbar
-Path=
-Terminal=False
-Type=Application
-```
-
-Winbar should now auto start with your computer. You'll want to remove the default KDE panel by right clicking your desktop wallpaper and entering edit mode.
