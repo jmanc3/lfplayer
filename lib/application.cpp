@@ -11,9 +11,6 @@
 #include "dpi.h"
 #include "defer.h"
 #include "../src/config.h"
-#include "../src/root.h"
-#include "audio.h"
-#include "../src/settings_menu.h"
 
 #include <algorithm>
 #include <iostream>
@@ -403,14 +400,21 @@ concerned_containers(App *app, AppClient *client);
 void set_active(AppClient *client, const std::vector<Container *> &active_containers, Container *c, bool state);
 
 static void deliver_fine_scroll_event(App *app, int horizontal, int vertical, bool came_from_touchpad) {
+    // TODO: only if mouse inside one of our clients currently
+    bool none_inside_of = true;
+    for (auto c: app->clients)
+        if (c->entered)
+            none_inside_of = false;
+    if (none_inside_of)
+        return;
+
     if (came_from_touchpad)
         app->last_touchpad_time = get_current_time_in_ms();
-    xcb_query_pointer_cookie_t pointer_cookie = xcb_query_pointer(app->connection, app->screen->root);
-    xcb_query_pointer_reply_t *pointer_reply = xcb_query_pointer_reply(app->connection, pointer_cookie, nullptr);
-    
-    if (!pointer_reply)
-        return;
-    defer(free(pointer_reply));
+    //xcb_query_pointer_cookie_t pointer_cookie = xcb_query_pointer(app->connection, app->screen->root);
+    //xcb_query_pointer_reply_t *pointer_reply = xcb_query_pointer_reply(app->connection, pointer_cookie, nullptr);
+    //if (!pointer_reply)
+        //return;
+    //defer(free(pointer_reply));
     
     for (auto *client: app->clients) {
         if (client->root) {
@@ -420,9 +424,12 @@ static void deliver_fine_scroll_event(App *app, int horizontal, int vertical, bo
             continue;
         }
         
-        if (bounds_contains(*client->bounds, pointer_reply->root_x, pointer_reply->root_y)) {
-            double x = pointer_reply->root_x - client->bounds->x;
-            double y = pointer_reply->root_y - client->bounds->y;
+        // TODO: just super wrong somehow
+       
+        //if (bounds_contains(*client->bounds, pointer_reply->root_x, pointer_reply->root_y)) {
+        if (client->entered) {
+            double x = client->mouse_current_x;
+            double y = client->mouse_current_y;
             
             client->mouse_initial_x = x;
             client->mouse_initial_y = y;
@@ -489,32 +496,7 @@ static bool listen_for_raw_input_events(App *app, xcb_generic_event_t *event, xc
     if (event->response_type == XCB_GE_GENERIC) {
         auto *generic_event = (xcb_ge_generic_event_t *) event;
         if (generic_event->event_type == XCB_INPUT_KEY_PRESS) {
-            auto *press = (xcb_input_key_press_event_t *) event;
-
-            xcb_keysym_t keysym = xcb_key_symbols_get_keysym(app->key_symbols, press->detail, 0);
-            
-            if (clean && (press->detail >= 10 && press->detail <= 19)) {
-                num = true;
-                if (winbar_settings->pinned_icon_shortcut) {
-                    meta_pressed(press->detail);
-                }
-            }
-            num = false;
-            
-            if (clean && (keysym == XK_R || keysym == XK_r)) {
-                start_run_window();
-            }
-            clean = keysym == XK_Super_L || keysym == XK_Super_R;
         } else if (generic_event->event_type == XCB_INPUT_KEY_RELEASE) {
-            auto *release = (xcb_input_key_release_event_t *) event;
-
-            xcb_keysym_t keysym = xcb_key_symbols_get_keysym(app->key_symbols, release->detail, 0);
-            
-            bool is_meta = keysym == XK_Super_L || keysym == XK_Super_R;
-            if (is_meta && clean && !num) {
-                meta_pressed(0);
-                clean = false;
-            }
         } else if (generic_event->event_type == XCB_INPUT_RAW_MOTION) {
             auto *rmt_event = (xcb_input_raw_motion_event_t *) event;
             int axis_len = xcb_input_raw_button_press_axisvalues_length(rmt_event);
@@ -1033,12 +1015,17 @@ client_new(App *app, Settings settings, const std::string &name) {
         xcb_icccm_wm_hints_set_input(&hints, XCB_INPUT_FOCUS_NONE);
         xcb_icccm_set_wm_hints(app->connection, window, &hints);
     } else {
+        /*
         xcb_icccm_wm_hints_t hints;
         xcb_icccm_wm_hints_set_input(&hints, XCB_INPUT_FOCUS_FOLLOW_KEYBOARD);
         xcb_icccm_set_wm_hints(app->connection, window, &hints);
+*/
     }
     
-    if (settings.dock) {
+    if (settings.dialog) {
+        xcb_atom_t atom = get_cached_atom(app, "_NET_WM_WINDOW_TYPE_DIALOG");
+        xcb_ewmh_set_wm_window_type(&app->ewmh, window, 1, &atom);
+    } if (settings.dock) {
         xcb_atom_t atom = get_cached_atom(app, "_NET_WM_WINDOW_TYPE_DOCK");
         xcb_ewmh_set_wm_window_type(&app->ewmh, window, 1, &atom);
     } else if (settings.tooltip) {
@@ -1191,7 +1178,7 @@ client_new(App *app, Settings settings, const std::string &name) {
     if (!client->ctx) {
         client->ctx = new DrawContext;
         //client->ctx->buffer = new OffscreenFrameBuffer(client->bounds->w, client->bounds->h);
-        client->should_use_gl = winbar_settings->use_opengl;
+        client->should_use_gl = false;
     }
     
     // vsync off
@@ -1413,6 +1400,8 @@ void client_close(App *app, AppClient *client) {
                     w = parent_client->window;
                     xcb_set_input_focus(app->connection, XCB_INPUT_FOCUS_PARENT, parent_client->window,
                                         XCB_CURRENT_TIME);
+                   
+                    printf("focus 2\n");
                     xcb_ewmh_request_change_active_window(&app->ewmh,
                                                           app->screen_number,
                                                           parent_client->window,
@@ -1488,6 +1477,8 @@ void client_close(App *app, AppClient *client) {
     if (w != 0) {
         xcb_set_input_focus(app->connection, XCB_INPUT_FOCUS_PARENT, w,
                             XCB_CURRENT_TIME);
+        printf("focus 3\n");
+
         xcb_ewmh_request_change_active_window(&app->ewmh,
                                               app->screen_number,
                                               w,
@@ -1602,6 +1593,10 @@ void paint_container(App *app, AppClient *client, Container *container) {
                     }
                 }
             }
+        }
+        
+        if (container->after_paint && client->cr) {
+            container->after_paint(client, client->cr, container);
         }
     }
 }
@@ -2147,13 +2142,11 @@ void handle_mouse_enter_notify(App *app) {
     ZoneScoped;
 #endif
     auto *e = (xcb_enter_notify_event_t *) (event);
-    if (e->mode != XCB_NOTIFY_MODE_NORMAL)// clicks generate leave and enter
-        // notifies when you're grabbing wtf xlib
-        return;
     
     auto client = client_by_window(app, e->event);
     if (!valid_client(app, client))
         return;
+    client->entered = true;
     
     handle_mouse_motion(app, client, e->event_x, e->event_y);
 }
@@ -2163,18 +2156,16 @@ void handle_mouse_leave_notify(App *app) {
     ZoneScoped;
 #endif
     auto *e = (xcb_leave_notify_event_t *) (event);
-    if (e->mode != XCB_NOTIFY_MODE_NORMAL)// clicks generate leave and enter
-        // notifies when you're grabbing wtf xlib
-        return;
     
     auto client = client_by_window(app, e->event);
     if (!valid_client(app, client))
         return;
+    client->entered = false;
     
     client->mouse_current_x = e->event_x;
     client->mouse_current_y = e->event_y;
-    client->motion_event_x = e->event_x;
-    client->motion_event_y = e->event_y;
+    client->motion_event_x = -1;
+    client->motion_event_y = -1;
     client->previous_x = -1;
     client->previous_y = -1;
     std::vector<Container *> concerned = concerned_containers(app, client);
@@ -2404,10 +2395,10 @@ void handle_xcb_event(App *app, xcb_window_t window_number, xcb_generic_event_t 
         }
         case XCB_LEAVE_NOTIFY: {
             auto *e = (xcb_leave_notify_event_t *) event;
-            if (e->mode != 0) {
-                return;
+            if (e->mode == 1) { // we receive 1 when scrolling which is just completely wrong
+                break;
             }
-            if (auto client = client_by_window(app, window_number)) {
+            if (auto client = client_by_window(app, e->event)) {
                 if (change_event_source) {
                     e->event = window_number;
                     e->event_x -= client->bounds->x;
@@ -2419,10 +2410,10 @@ void handle_xcb_event(App *app, xcb_window_t window_number, xcb_generic_event_t 
         }
         case XCB_ENTER_NOTIFY: {
             auto *e = (xcb_enter_notify_event_t *) event;
-            if (e->mode != 0) {
-                return;
+            if (e->mode == 1) { // we receive 1 when scrolling which is just completely wrong
+                break;
             }
-            if (auto client = client_by_window(app, window_number)) {
+            if (auto client = client_by_window(app, e->event)) {
                 if (change_event_source) {
                     e->event = window_number;
                     e->event_x -= client->bounds->x;
@@ -2483,9 +2474,11 @@ void handle_xcb_event(App *app, xcb_window_t window_number, xcb_generic_event_t 
                         client_close_threaded(app, client);
                         xcb_ungrab_button(app->connection, XCB_BUTTON_INDEX_ANY, app->screen->root, XCB_MOD_MASK_ANY);
                     } else {
-                        if (client->popup_info.takes_input_focus)
+                        if (client->popup_info.takes_input_focus) {
                             xcb_set_input_focus(app->connection, XCB_INPUT_FOCUS_PARENT, client->window,
-                                                XCB_CURRENT_TIME);
+                                                    XCB_CURRENT_TIME);
+                            printf("focus 4\n");
+                       }
                     }
                 }
                 xcb_flush(app->connection);
@@ -2618,9 +2611,6 @@ void app_main(App *app) {
         return;
     }
     
-    // Audio thread
-    audio_start(app);
-    
     int MAX_POLLING_EVENTS_AT_THE_SAME_TIME = 1000;
     pollfd fds[MAX_POLLING_EVENTS_AT_THE_SAME_TIME];
     
@@ -2705,9 +2695,6 @@ void app_main(App *app) {
     for (AppClient *client: app->clients) {
         client_close(app, client);
     }
-    
-    audio_stop();
-    audio_join();
 }
 
 void app_clean(App *app) {
@@ -2758,6 +2745,7 @@ void app_clean(App *app) {
     
     XCloseDisplay(app->display);
 }
+
 
 void
 client_create_animation(App *app, AppClient *client, double *value, std::shared_ptr<bool> lifetime, double delay,
@@ -2811,6 +2799,44 @@ void client_create_animation(App *app,
                              double target,
                              void (*finished)(AppClient *client)) {
     client_create_animation(app, client, value, std::move(lifetime), delay, length, easing, target, finished, false);
+}
+
+void client_create_animation(App *app,
+                             AppClient *client,
+                             double *value,
+                             std::shared_ptr<bool> lifetime,
+                             double delay,
+                             double length,
+                             easingFunction easing,
+                             double target,
+                             void (*finished)(AppClient *client, double *target)) {
+    for (auto &animation: client->animations) {
+        if (animation.value == value) {
+            animation.lifetime = lifetime;
+            animation.delay = delay;
+            animation.length = length;
+            animation.easing = easing;
+            animation.target = target;
+            animation.start_time = get_current_time_in_ms();
+            animation.start_value = *value;
+            animation.finished_with_target = finished;
+            animation.relayout = false;
+            return;
+        }
+    }
+    
+    ClientAnimation animation;
+    animation.delay = delay;
+    animation.value = value;
+    animation.lifetime = lifetime;
+    animation.length = length;
+    animation.easing = easing;
+    animation.target = target;
+    animation.start_time = get_current_time_in_ms();
+    animation.start_value = *value;
+    animation.finished_with_target = finished;
+    animation.relayout = false;
+    client->animations.push_back(animation);
 }
 
 void
@@ -3039,7 +3065,9 @@ void client_animation_paint(App *app, AppClient *client, Timeout *timeout, void 
             if (animation.done) {
                 *animation.value = animation.target;
                 client_unregister_animation(app, client);
-                if (animation.finished) {
+                if (animation.finished_with_target) {
+                    animation.finished_with_target(client, &animation.target);
+                } else if (animation.finished) {
                     animation.finished(client);
                 }
             }

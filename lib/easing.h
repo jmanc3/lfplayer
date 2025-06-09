@@ -31,6 +31,9 @@ enum easing_functions {
     EaseInOutElastic,
     EaseInBounce,
     EaseOutBounce,
+    EaseCustom,
+    EaseSmooth,
+    EaseSmoothIn,
     EaseInOutBounce
 };
 

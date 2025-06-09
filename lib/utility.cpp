@@ -1,8 +1,33 @@
 
 #include "utility.h"
 #include "hsluv.h"
+#include "drawer.h"
 #include <stdio.h>
 #include <X11/Xlib.h>
+#include <string.h>
+#include <time.h>
+#include <iomanip>
+#include <cstdio>
+
+#include <taglib/id3v2header.h>
+#include <taglib/attachedpictureframe.h>
+#include <taglib/fileref.h>
+#include <taglib/tfile.h>
+#include <taglib/mpegfile.h>
+#include <taglib/id3v2tag.h>
+#include <taglib/id3v2frame.h>
+#include <taglib/flacfile.h>
+#include <taglib/flacpicture.h>
+#include <taglib/mp4file.h>
+#include <taglib/mp4tag.h>
+#include <taglib/oggfile.h>
+#include <taglib/vorbisfile.h>
+#include <taglib/xiphcomment.h>
+
+#include <fstream>
+#include <iostream>
+#include <unordered_map>
+
 
 #ifdef TRACY_ENABLE
 
@@ -446,6 +471,8 @@ lighten(ArgbColor color, double amount) {
     return result;
 }
 
+bool paint_jpg_to_surface(cairo_surface_t *surface, std::string path, int target_size);
+
 void
 load_icon_full_path(App *app, AppClient *client_entity, cairo_surface_t **surface, std::string path, int target_size) {
 #ifdef TRACY_ENABLE
@@ -457,6 +484,9 @@ load_icon_full_path(App *app, AppClient *client_entity, cairo_surface_t **surfac
     } else if (path.find("png") != std::string::npos) {
         *surface = accelerated_surface(app, client_entity, target_size, target_size);
         paint_png_to_surface(*surface, path, target_size);
+    } else if (path.find("jpg") != std::string::npos) {
+        *surface = accelerated_surface(app, client_entity, target_size, target_size);
+        paint_jpg_to_surface(*surface, path, target_size);
     }
 }
 
@@ -534,6 +564,68 @@ bool paint_png_to_surface(cairo_surface_t *surface, std::string path, int target
     return true;
 }
 
+#include "stb_image.h"
+
+bool paint_jpg_to_surface(cairo_surface_t *surface, std::string path, int target_size) {
+#ifdef TRACY_ENABLE
+    ZoneScoped;
+#endif
+
+    int width, height, channels;
+    unsigned char *data = stbi_load(path.c_str(), &width, &height, &channels, 4); // force RGBA
+
+    if (!data) {
+        return false;
+    }
+
+    // Cairo expects pixel data in ARGB32 format. We will create a surface from raw data.
+    cairo_surface_t *image_surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+    unsigned char *dest = cairo_image_surface_get_data(image_surface);
+    int stride = cairo_image_surface_get_stride(image_surface);
+
+    // Convert from RGBA to ARGB (premultiplied)
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int i = (y * width + x) * 4;
+            int j = y * stride + x * 4;
+
+            unsigned char r = data[i + 0];
+            unsigned char g = data[i + 1];
+            unsigned char b = data[i + 2];
+            unsigned char a = data[i + 3];
+
+            // Premultiply alpha
+            dest[j + 0] = (b * a) / 255;
+            dest[j + 1] = (g * a) / 255;
+            dest[j + 2] = (r * a) / 255;
+            dest[j + 3] = a;
+        }
+    }
+
+    cairo_surface_mark_dirty(image_surface);
+    stbi_image_free(data);
+
+    cairo_t *cr = cairo_create(surface);
+    cairo_save(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_restore(cr);
+
+    cairo_save(cr);
+    if (target_size != width) {
+        double scale = (double)target_size / (double)width;
+        cairo_scale(cr, scale, scale);
+    }
+    cairo_set_source_surface(cr, image_surface, 0, 0);
+    cairo_paint(cr);
+    cairo_restore(cr);
+
+    cairo_destroy(cr);
+    cairo_surface_destroy(image_surface);
+
+    return true;
+}
+
 bool
 paint_surface_with_image(cairo_surface_t *surface, std::string path, int target_size, void (*upon_completion)(bool)) {
 #ifdef TRACY_ENABLE
@@ -544,7 +636,10 @@ paint_surface_with_image(cairo_surface_t *surface, std::string path, int target_
         success = paint_svg_to_surface(surface, path, target_size);
     } else if (path.find(".png") != std::string::npos) {
         success = paint_png_to_surface(surface, path, target_size);
+    } else if (path.find(".jpg") != std::string::npos) {
+        success = paint_jpg_to_surface(surface, path, target_size);
     }
+    
     if (upon_completion != nullptr) {
         upon_completion(success);
     }
@@ -585,8 +680,28 @@ accelerated_surface_rgb(App *app, AppClient *client_entity, int w, int h) {
     return fast_surface;
 }
 
-void paint_surface_with_data(cairo_surface_t *surface, uint32_t *icon_data) {
-    unsigned char *data = cairo_image_surface_get_data(surface);
+void paint_surface_with_data(cairo_surface_t *surface, unsigned char *data, int width, int height) {
+    unsigned char *dest = cairo_image_surface_get_data(surface);
+    int stride = cairo_image_surface_get_stride(surface);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int i = (y * width + x) * 4;
+            int j = y * stride + x * 4;
+            
+            unsigned char r = data[i + 0];
+            unsigned char g = data[i + 1];
+            unsigned char b = data[i + 2];
+            unsigned char a = data[i + 3];
+            
+            // Premultiply alpha
+            dest[j + 0] = (b * a) / 255;
+            dest[j + 1] = (g * a) / 255;
+            dest[j + 2] = (r * a) / 255;
+            dest[j + 3] = a;
+        }
+    }
+    
+    cairo_surface_mark_dirty(surface);
 }
 
 bool there_is_a_compositor(App *app) {
@@ -831,6 +946,282 @@ bool already_began(AppClient *client, double *value, double target) {
             }
             return a.target == target;
         }
-    }   
+    }
     return false;
 }
+
+
+bool hasExtension(const std::string& filename, const std::string& ext) {
+    auto pos = filename.rfind('.');
+    if (pos == std::string::npos) return false;
+    
+    std::string fileExt = filename.substr(pos);
+    std::transform(fileExt.begin(), fileExt.end(), fileExt.begin(), ::tolower);
+        return fileExt == ext;
+}
+
+
+std::string seconds_to_mmss(int seconds) {
+    int minutes = seconds / 60;
+    int secs = seconds % 60;
+
+    std::ostringstream oss;
+    oss << minutes << ":"
+        << std::setw(2) << std::setfill('0') << secs;
+
+    return oss.str();
+}
+
+static std::string get_extension_from_mime(const std::string& mime) {
+    static std::unordered_map<std::string, std::string> mimeToExt = {
+        {"image/jpeg", ".jpg"},
+        {"image/png",  ".png"},
+        {"image/gif",  ".gif"},
+        {"image/bmp",  ".bmp"},
+        {"image/tiff", ".tiff"}
+    };
+    auto it = mimeToExt.find(mime);
+    return (it != mimeToExt.end()) ? it->second : ".bin";
+}
+
+bool extract_album_art(const std::string& filePath, const std::string& outputBase) {
+    TagLib::FileRef ref(filePath.c_str());
+    if (!ref.file() || !ref.file()->isValid()) {
+        std::cerr << "Invalid or unsupported file: " << filePath << std::endl;
+        return false;
+    }
+
+    std::string extension = ".bin";
+    TagLib::ByteVector imageData;
+    std::string mime;
+
+    // Try MP3 (ID3v2)
+    if (auto* mpeg = dynamic_cast<TagLib::MPEG::File*>(ref.file())) {
+        auto* id3 = mpeg->ID3v2Tag();
+        if (id3) {
+            auto frames = id3->frameListMap()["APIC"];
+            if (!frames.isEmpty()) {
+                auto* pic = dynamic_cast<TagLib::ID3v2::AttachedPictureFrame*>(frames.front());
+                if (pic) {
+                    imageData = pic->picture();
+                    mime = pic->mimeType().to8Bit(true);
+                }
+            }
+        }
+    }
+
+    // Try FLAC
+    if (imageData.isEmpty()) {
+        TagLib::FLAC::File flac(filePath.c_str());
+        if (flac.isValid()) {
+            auto pics = flac.pictureList();
+            if (!pics.isEmpty()) {
+                auto* pic = pics.front();
+                if (pic) {
+                    imageData = pic->data();
+                    mime = pic->mimeType().to8Bit(true);
+                }
+            }
+        }
+    }
+
+    // Try MP4/M4A
+    if (imageData.isEmpty()) {
+        TagLib::MP4::File mp4(filePath.c_str());
+        if (mp4.isValid()) {
+            auto tag = mp4.tag();
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+            if (tag && tag->itemListMap().contains("covr")) {
+                const auto& covr = tag->itemListMap()["covr"].toCoverArtList();
+                if (!covr.isEmpty()) {
+                    const auto& art = covr.front();
+                    imageData = art.data();
+                    mime = art.format() == TagLib::MP4::CoverArt::PNG ? "image/png" : "image/jpeg";
+                }
+            }
+#pragma GCC diagnostic pop
+        }
+    }
+    
+    
+    // Try OGG Vorbis/Opus
+    if (imageData.isEmpty()) {
+        TagLib::Ogg::Vorbis::File ogg(filePath.c_str());
+        if (ogg.isValid()) {
+            auto tag = ogg.tag();
+            auto xiph = dynamic_cast<TagLib::Ogg::XiphComment*>(tag);
+            if (xiph && xiph->pictureList().size() > 0) {
+                auto* pic = xiph->pictureList().front();
+                if (pic) {
+                    imageData = pic->data();
+                    mime = pic->mimeType().to8Bit(true);
+                }
+            }
+        }
+    }
+    
+
+    if (imageData.isEmpty()) {
+        std::cerr << "No album art found in file: " << filePath << std::endl;
+        return false;
+    }
+
+    extension = get_extension_from_mime(mime);
+    std::string outputPath = outputBase + extension;
+
+    std::ofstream outFile(outputPath, std::ios::binary);
+    if (!outFile) {
+        std::cerr << "Failed to write to: " << outputPath << std::endl;
+        return false;
+    }
+
+    outFile.write(imageData.data(), imageData.size());
+    outFile.close();
+
+    return true;
+}
+
+float clamp(float val, float min, float max) {
+    return std::max(min, std::min(val, max));
+}
+
+std::map<ArgbColor, float> mainColorsInImage(cairo_surface_t* surface) {
+    float dimension = 10;
+    float flexibility = 2;
+    float range = 60;
+
+    int width = cairo_image_surface_get_width(surface);
+    int height = cairo_image_surface_get_height(surface);
+    unsigned char* data = cairo_image_surface_get_data(surface);
+    int stride = cairo_image_surface_get_stride(surface);
+
+    std::vector<ArgbColor> colours;
+    for (int y = 0; y < dimension; y++) {
+        for (int x = 0; x < dimension; x++) {
+            int srcX = static_cast<int>(x * width / dimension);
+            int srcY = static_cast<int>(y * height / dimension);
+            unsigned char* pixel = data + srcY * stride + srcX * 4;
+
+            ArgbColor color;
+            color.r = pixel[2] / 255.0f;
+            color.g = pixel[1] / 255.0f;
+            color.b = pixel[0] / 255.0f;
+            color.a = pixel[3] / 255.0f;
+            colours.push_back(color);
+        }
+    }
+
+    std::vector<ArgbColor> flexibleColours;
+    int flexFactor = static_cast<int>(flexibility * 2 + 1);
+
+    for (const auto& pixel : colours) {
+        std::vector<float> reds, greens, blues;
+        for (int i = 0; i < 3; i++) {
+            float base = (i == 0 ? pixel.r : (i == 1 ? pixel.g : pixel.b)) * 255.0f;
+            for (int f = -static_cast<int>(flexibility); f <= flexibility; f++) {
+                float val = clamp(base + f, 0.0f, 255.0f) / 255.0f;
+                if (i == 0) reds.push_back(val);
+                else if (i == 1) greens.push_back(val);
+                else blues.push_back(val);
+            }
+        }
+
+        for (float r : reds) {
+            for (float g : greens) {
+                for (float b : blues) {
+                    flexibleColours.push_back({r, g, b, 1.0f});
+                }
+            }
+        }
+    }
+
+    std::map<ArgbColor, int> colourCounter;
+    for (const auto& color : flexibleColours) {
+        colourCounter[color]++;
+    }
+
+    std::vector<std::pair<ArgbColor, int>> ordered(colourCounter.begin(), colourCounter.end());
+    std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) {
+        return b.second < a.second;
+    });
+
+    std::vector<ArgbColor> ranges;
+    for (const auto& [key, count] : ordered) {
+        bool exclude = false;
+        for (const auto& existing : ranges) {
+            if (std::abs(key.r - existing.r) <= range / 255.0f &&
+                std::abs(key.g - existing.g) <= range / 255.0f &&
+                std::abs(key.b - existing.b) <= range / 255.0f) {
+                exclude = true;
+                break;
+            }
+        }
+        if (!exclude) {
+            ranges.push_back(key);
+        }
+    }
+
+    std::map<ArgbColor, float> colourDictionary;
+    float totalCount = 0.0f;
+    for (const auto& key : ranges) {
+        totalCount += colourCounter[key];
+    }
+
+    for (const auto& key : ranges) {
+        float percentage = static_cast<float>(colourCounter[key]) / totalCount;
+        colourDictionary[key] = percentage;
+    }
+
+    return colourDictionary;
+}
+
+std::string toLower(const std::string& str) {
+    std::string lower = str;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return lower;
+}
+
+void paint_debug(AppClient *client, cairo_t *cr, Container *c) {
+    draw_colored_rect(client, ArgbColor(1, 0, 1, 1), c->real_bounds);
+}
+    
+std::string sanitize_file_name(const std::string& input) {
+    std::string output;
+    for (char c : input) {
+        // Allow only: alphanum, dash, underscore, dot
+        if (std::isalnum(static_cast<unsigned char>(c)) ||
+            c == '-' || c == '_' || c == '.') {
+            output += c;
+        } else if (c == '/' || c == '\\') {
+            // Explicitly replace path separators (even if '\' is only a separator on Windows)
+            output += '_';
+        } else {
+            output += '_';
+        }
+    }
+
+    // Prevent empty file name
+    if (output.empty()) {
+        output = "unnamed";
+    }
+
+    // Prevent "." or ".."
+    if (output == "." || output == "..") {
+        output = "_" + output;
+    }
+
+    // Enforce max filename length (255 bytes is common)
+    const size_t max_length = 255;
+    if (output.length() > max_length) {
+        output = output.substr(0, max_length);
+    }
+
+    return output;
+}
+
+std::string asset(std::string name) {
+    return "/usr/share/lfp/icons/" + name;
+}
+    

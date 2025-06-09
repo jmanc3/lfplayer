@@ -41,18 +41,14 @@ sudo yum install git cmake g++ cairo-devel pango-devel librsvg2-devel xcb-util-d
 * Download the source and enter the folder:
 
 ```bash
-git clone https://github.com/jmanc3/winbar
-cd winbar
+git clone https://github.com/jmanc3/lfplayer
+cd lfplayer
 ```
 
 * Build using cmake and make:
 
 ```bash
-mkdir release
-cd release
-cmake -DCMAKE_BUILD_TYPE=Release ../
-make -j 16
-sudo make install
+./install.sh
 ```
 
 That will install 'lfp' to /usr/local/bin/lfp.

@@ -2,7 +2,6 @@
 #include "container.h"
 #include "application.h"
 #include "../src/components.h"
-#include "../src/config.h"
 
 #include <cassert>
 #include <cmath>
@@ -23,6 +22,12 @@
 #ifdef TRACY_ENABLE
 #include <tracy/Tracy.hpp>
 #endif
+
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+
+#include "stb_image_resize2.h"
+
+#define STB_IMAGE_IMPLEMENTATION
 
 #include "stb_image.h"
 
@@ -495,6 +500,22 @@ void layout_stack(AppClient *client, cairo_t *cr, Container *container, const Bo
     }
 }
 
+void layout_absolute(AppClient *client, cairo_t *cr, Container *container, const Bounds &bounds) {
+    if (container->pre_layout) {
+        container->pre_layout(client, container, bounds); // will assign final positions to children real_bounds
+    }
+     
+    for (auto child: container->children) {
+        if (child && child->pre_layout) {
+            child->pre_layout(client, child, bounds);
+        }
+    }
+
+    for (auto child: container->children) {
+        layout(client, cr, child, child->real_bounds);
+    }
+}
+
 // Expected container children:
 // [required] right_box
 // [required] bottom_box
@@ -619,11 +640,15 @@ void clamp_scroll(ScrollContainer *scrollpane) {
 
 void layout_newscrollpane_content(AppClient *client, cairo_t *cr, ScrollContainer *scroll, const Bounds &bounds,
                                   bool right_scroll_bar_needed, bool bottom_scroll_bar_needed) {
+    if (scroll->content && scroll->content->pre_layout) {
+        scroll->content->pre_layout(client, scroll->content, Bounds(bounds.x + scroll->scroll_h_visual, bounds.y + scroll->scroll_v_visual, bounds.w, bounds.h));
+    }
     double w = scroll->content->wanted_bounds.w;
     double h = scroll->content->wanted_bounds.h;
     ScrollPaneSettings settings = scroll->settings;
     
-    if (w == FILL_SPACE) {
+    if (scroll->content->type == ::absolute) {
+    } else if (w == FILL_SPACE) {
         w = bounds.w - (settings.right_inline_track ? 0 : right_scroll_bar_needed ? settings.right_width : 0);
         if (settings.right_show_amount == 0) {
             w = bounds.w - settings.right_width;
@@ -633,7 +658,8 @@ void layout_newscrollpane_content(AppClient *client, cairo_t *cr, ScrollContaine
     } else {
         w = true_width(scroll->content);
     }
-    if (h == FILL_SPACE) {
+    if (scroll->content->type == ::absolute) {
+    } else if (h == FILL_SPACE) {
         h = bounds.h - (settings.bottom_inline_track ? 0 : bottom_scroll_bar_needed ? settings.bottom_height : 0);
         if (settings.bottom_show_amount == 0) {
             h = bounds.h - settings.bottom_height;
@@ -642,10 +668,6 @@ void layout_newscrollpane_content(AppClient *client, cairo_t *cr, ScrollContaine
         }
     } else {
         h = true_height(scroll->content);
-    }
-    
-    if (scroll->content && scroll->content->pre_layout) {
-        scroll->content->pre_layout(client, scroll->content, Bounds(bounds.x + scroll->scroll_h_visual, bounds.y + scroll->scroll_v_visual, w, h));
     }
 
     layout(client, cr, scroll->content,
@@ -752,6 +774,8 @@ void layout(AppClient *client, cairo_t *cr, Container *container, const Bounds &
         layout_newscrollpane(client, cr, (ScrollContainer *) container, container->children_bounds);
     } else if (container->type & layout_type::editable_label) {
     
+    } else if (container->type & layout_type::absolute) {
+        layout_absolute(client, cr, container, container->children_bounds);
     }
     
     // TODO: this only covers the first layer and not all of them
@@ -881,6 +905,13 @@ bool bounds_contains(const Bounds &bounds, int x, int y) {
     int bounds_h = std::round(bounds.h);
     
     return x >= bounds_x && x <= bounds_x + bounds_w && y >= bounds_y && y <= bounds_y + bounds_h;
+}
+
+Bounds::Bounds(double amount) {
+    this->x = amount;
+    this->y = amount;
+    this->w = amount;
+    this->h = amount;
 }
 
 Bounds::Bounds(double x, double y, double w, double h) {
@@ -1142,28 +1173,10 @@ Subprocess::Subprocess(App *app, const std::string &command) {
 }
 
 void AppClient::draw_start() {
-    //printf("draw_start: %s\n", name.c_str());
-    if (!is_context_current) {
-        for (auto *item: app->clients)
-            item->is_context_current = false;
-        // TODO: this might be failing because we are doing it too fast when in opengl mode, because for some reason we never sleep?
-        glXMakeContextCurrent(app->display, gl_drawable, gl_drawable, context);
-        is_context_current = true;
-    }
-    if (just_changed_size) {
-        glXMakeContextCurrent(app->display, gl_drawable, gl_drawable, context);
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glViewport(0, 0, bounds->w, bounds->h);
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
-        glOrtho(0, bounds->w, bounds->h, 0, 1, -1); // Origin in lower-left corner
-    }
 }
 
 void AppClient::draw_end(bool reset_input) {
     //printf("draw_end: %s\n", name.c_str());
-    glXSwapBuffers(app->display, gl_drawable);
     just_changed_size = false;
     previous_redraw_time = get_current_time_in_ms();
 }

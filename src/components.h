@@ -8,7 +8,6 @@
 #include <application.h>
 #include <stack>
 #include <utility.h>
-#include "taskbar.h"
 
 Container *
 make_scrollpane(Container *parent, ScrollPaneSettings settings);
@@ -131,14 +130,14 @@ public:
     double cursor_width = 1;
     Bounds pad = Bounds(0, 0, 0, 0);
 };
-
+/*
 class ButtonData : public IconButton {
 public:
     std::string text;
     std::string full_path;
     bool valid_button = true;
 };
-
+*/
 Container *
 make_textarea(App *app, AppClient *client, Container *parent, TextAreaSettings settings);
 

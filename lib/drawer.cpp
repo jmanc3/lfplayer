@@ -235,6 +235,17 @@ void draw_pop_temp(AppClient *client) {
     }
 }
 
+void
+rounded_rect(AppClient *client, double corner_radius, double x, double y, double width, double height, ArgbColor color,
+             float stroke_w) {
+    draw_round_rect(client, color, Bounds(x, y, width, height), corner_radius, stroke_w);
+}
+
+
+gl_surface::gl_surface() {
+    // TODO: why do we need this?
+    //this->client = client_by_name(app, "taskbar");
+}
 
 
 

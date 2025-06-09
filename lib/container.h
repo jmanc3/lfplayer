@@ -10,7 +10,7 @@
 #include <xcb/xcb_event.h>
 #include <xcb/xproto.h>
 #include <GL/glew.h>
-#include <GL/glx.h>
+//#include <GL/glx.h>
 #include <xkbcommon/xkbcommon-x11.h>
 #include <xkbcommon/xkbcommon.h>
 #include <glm/glm.hpp>
@@ -45,6 +45,8 @@ struct Bounds {
     
     Bounds(double x, double y, double w, double h);
     
+    Bounds(double amount);
+    
     Bounds(const Bounds &b);
     
     bool non_zero();
@@ -78,6 +80,8 @@ enum layout_type {
     newscroll = 1 << 12,
     
     editable_label = 1 << 13,
+    
+    absolute = 1 << 14,
 };
 
 enum container_alignment {
@@ -216,6 +220,7 @@ struct ClientAnimation {
     bool done = false;
     
     void (*finished)(AppClient *client) = nullptr;
+    void (*finished_with_target)(AppClient *client, double *target) = nullptr;
     
     double delay;
 };
@@ -631,7 +636,7 @@ struct FontReference {
     // Will have both pango and FreeType for now
     FreeFont *font = nullptr;
     PangoLayout *layout = nullptr;
-        
+    
     void begin();
     Sizes begin(std::string text, float r, float g, float b, float a = 1);
     void set_color(float r, float g, float b, float a = 1);
@@ -680,11 +685,11 @@ struct AppClient {
     
     xcb_window_t window;
     bool is_context_current = false;
-    GLXContext context;
+    //GLXContext context;
     bool gl_window_created = true;
     bool should_use_gl = false;
-    GLXWindow gl_window;
-    GLXDrawable gl_drawable; // Automatically freed when window is destroyed
+    //GLXWindow gl_window;
+//    GLXDrawable gl_drawable; // Automatically freed when window is destroyed
     DrawContext *ctx;
     
     std::string name;
@@ -707,6 +712,8 @@ struct AppClient {
     bool left_mouse_down = false;
     
     bool mapped = true;
+    
+    bool entered = false; // Means the mouse is actually inside the client directly and not just inside its bounds
     
     long creation_time;
     long last_repaint_time;
@@ -824,6 +831,8 @@ struct Container {
     double scroll_v_real = 0;
     double scroll_h_real = 0;
     
+    long last_time_scrolled = 0;
+    
     std::shared_ptr<bool> lifetime = std::make_shared<bool>();
     double scroll_v_visual = 0;
     double scroll_h_visual = 0;
@@ -894,6 +903,9 @@ struct Container {
     
     // Called when client needs to repaint itself
     void (*when_paint)(AppClient *client, cairo_t *cr, Container *self) = nullptr;
+    
+    // Called after all clients children have been painted
+    void (*after_paint)(AppClient *client, cairo_t *cr, Container *self) = nullptr;
     
     // Called once when the mouse enters the container for the first time
     void (*when_mouse_enters_container)(AppClient *client, cairo_t *cr, Container *self) = nullptr;

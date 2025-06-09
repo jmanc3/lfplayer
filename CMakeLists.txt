@@ -28,7 +28,7 @@ if (PROFILE)
     # run git clone https://github.com/wolfpld/tracy.git if you want to do this
     add_definitions(-DTRACY_ENABLE)
     add_subdirectory(tracy)
-    add_executable(${project_name} ${HEADERS} ${SOURCES} src/miniaudio.hh ${LIB} tracy/public/TracyClient.cpp)
+    add_executable(${project_name} ${HEADERS} ${SOURCES} lib/toml.hpp src/miniaudio.hh ${LIB} tracy/public/TracyClient.cpp)
 
     set(DL_LIB dl)
     set(PTHREAD_LIB pthread)
@@ -36,10 +36,17 @@ if (PROFILE)
     target_link_libraries(${project_name} PUBLIC Tracy::TracyClient)
 else ()
     # otherwise just compile
-    add_executable(${project_name} ${HEADERS} ${SOURCES} src/miniaudio.hh ${LIB})
+    add_executable(${project_name} ${HEADERS} ${SOURCES} lib/toml.hpp src/miniaudio.hh ${LIB})
 endif ()
 
 find_package(PkgConfig)
+
+# first you add the subdirectory
+add_subdirectory(taglib-1.13.1)
+# to find the name 'tag' you should use, you grep for add_library in the taglib-1.13.1 folder
+target_link_libraries(${PROJECT_NAME} PRIVATE tag)
+# the following is so that you don't have to ../taglib-1.13.1/taglib/thing.h and can just use thing.h
+target_include_directories(${PROJECT_NAME} PRIVATE taglib)
 
 if (NOT PkgConfig_FOUND)
     message(FATAL_ERROR "You need to have pkg-config installed. On voidlinux, sudo xbps-install pkg-config")
@@ -84,7 +91,6 @@ set(
         xcb-icccm # to make it easier to handle icccm request
         xcb-xkb # to handle translating key presses to actual text
         xkbcommon-x11 # to handle translating key presses to actual text
-        libconfig++ # to parse config files
         xcb-cursor # for setting the cursor
         dbus-1 # for interacting with dbus
         alsa # to be able to modify audio volume and mute state on alsa
@@ -92,7 +98,6 @@ set(
         xrender
         gl
         glew
-        taglib
 )
 
 find_package(glm REQUIRED)

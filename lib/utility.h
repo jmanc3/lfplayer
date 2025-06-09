@@ -94,6 +94,10 @@ struct ArgbColor {
         return color;
     }
     
+    bool operator<(const ArgbColor& other) const {
+        return std::tie(r, g, b) < std::tie(other.r, other.g, other.b);
+    }
+    
     bool operator==(const ArgbColor &rhs) const {
         return r == rhs.r &&
                g == rhs.g &&
@@ -103,6 +107,14 @@ struct ArgbColor {
     
     bool operator!=(const ArgbColor &rhs) const {
         return !(rhs == *this);
+    }
+    
+    float distance_to(const ArgbColor& other) const {
+        float dr = r - other.r;
+        float dg = g - other.g;
+        float db = b - other.b;
+        float da = a - other.a;
+        return std::sqrt(dr * dr + dg * dg + db * db + da * da);
     }
 };
 
@@ -303,7 +315,7 @@ argb_to_color(ArgbColor color);
 ArgbColor
 lighten(ArgbColor color, double amount);
 
-void paint_surface_with_data(cairo_surface_t *surface, uint32_t *icon_data);
+void paint_surface_with_data(cairo_surface_t *surface, unsigned char *data, int width, int height);
 
 cairo_surface_t *
 accelerated_surface(App *app, AppClient *client_entity, int w, int h);
@@ -343,9 +355,6 @@ bool is_light_theme(const ArgbColor &color);
 
 std::string clipboard();
 
-void
-rounded_rect(AppClient *client, double corner_radius, double x, double y, double width, double height, ArgbColor color, float stroke_w = 0);
-
 void pango_layout_get_pixel_size_safe(PangoLayout *layout, int *w, int *h);
 
 bool
@@ -354,5 +363,23 @@ starts_with(const std::string &str, const std::string &prefix);
 float random_float();
 
 bool already_began(AppClient *client, double *value, double target);
+
+bool hasExtension(const std::string& filename, const std::string& ext);
+
+std::string seconds_to_mmss(int seconds);
+
+bool extract_album_art(const std::string& filePath, const std::string& outputBase);
+
+float clamp(float val, float min, float max);
+
+std::map<ArgbColor, float> mainColorsInImage(cairo_surface_t* surface);
+
+std::string toLower(const std::string& str);
+
+void paint_debug(AppClient *client, cairo_t *cr, Container *c);
+
+std::string sanitize_file_name(const std::string& input);
+
+std::string asset(std::string name);
 
 #endif

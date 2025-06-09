@@ -52,6 +52,7 @@ struct Settings {
     
     bool skip_taskbar = true;
     bool no_input_focus = false;
+    bool dialog = false;
     bool dock = false;
     bool tooltip = false;
     bool sticky = false;
@@ -242,6 +243,17 @@ void client_create_animation(App *app,
                              easingFunction easing,
                              double target,
                              void (*finished)(AppClient *client));
+
+void client_create_animation(App *app,
+                             AppClient *client_entity,
+                             double *value,
+                             std::shared_ptr<bool> lifetime,
+                             double delay,
+                             double length,
+                             easingFunction easing,
+                             double target,
+                             void (*finished)(AppClient *client, double *target));
+
 
 void
 client_create_animation(App *app, AppClient *client, double *value, std::shared_ptr<bool> lifetime, double delay, double length, easingFunction easing,

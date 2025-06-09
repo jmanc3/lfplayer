@@ -7,7 +7,68 @@
 
 #include "container.h"
 #include "utility.h"
-#include "../src/taskbar.h"
+
+
+struct ClientTexture {
+    ImmediateTexture *texture = new ImmediateTexture;
+    AppClient *client = nullptr;
+    std::weak_ptr<bool> lifetime;
+};
+
+struct gl_surface {
+    bool valid = false; // If not valid, texture needs to be copied from src_surface again
+    
+    std::vector<ClientTexture *> textures;
+        
+    gl_surface();
+    
+    AppClient *creation_client = nullptr; // Which client the gl_surface is valid for
+};
+
+class HoverableButton : public UserData {
+public:
+    bool hovered = false;
+    double hover_amount = 0;
+    ArgbColor color = ArgbColor(0, 0, 0, 0);
+    int previous_state = -1;
+    
+    std::string text;
+    std::string icon;
+    
+    int color_option = 0;
+    ArgbColor actual_border_color = ArgbColor(0, 0, 0, 0);
+    ArgbColor actual_gradient_color = ArgbColor(0, 0, 0, 0);
+    ArgbColor actual_pane_color = ArgbColor(0, 0, 0, 0);
+};
+
+class IconButton : public HoverableButton {
+public:
+    cairo_surface_t *surface__ = nullptr;
+    gl_surface *gsurf = nullptr;
+    
+    // These three things are so that opening menus with buttons toggles between opening and closing
+    std::string invalidate_button_press_if_client_with_this_name_is_open;
+    bool invalid_button_down = false;
+    long timestamp = 0;
+    
+    IconButton() {
+        gsurf = new gl_surface();
+    }
+    
+    ~IconButton() {
+        cairo_surface_destroy(surface__);
+        delete gsurf;
+    }
+};
+
+
+class ButtonData : public IconButton {
+public:
+    std::string text;
+    std::string full_path;
+    bool valid_button = true;
+};
+
 
 void draw_colored_rect(AppClient *client, const ArgbColor &color, const Bounds &bounds);
 
@@ -40,6 +101,9 @@ void draw_operator(AppClient *client, int op);
 void draw_push_temp(AppClient *client);
 
 void draw_pop_temp(AppClient *client);
+
+void
+rounded_rect(AppClient *client, double corner_radius, double x, double y, double width, double height, ArgbColor color, float stroke_w = 0);
 
 
 #endif //WINBAR_DRAWER_H

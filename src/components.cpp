@@ -64,6 +64,7 @@ void fine_scrollpane_scrolled(AppClient *client,
 #endif
     auto cookie = xcb_xkb_get_state(client->app->connection, client->keyboard->device_id);
     auto reply = xcb_xkb_get_state_reply(client->app->connection, cookie, nullptr);
+    container->last_time_scrolled = client->app->current;
     
     if (reply->mods & XKB_KEY_Shift_L || reply->mods & XKB_KEY_Control_L) {
         container->scroll_h_real += scroll_x + scroll_y;
@@ -1488,14 +1489,14 @@ paint_textarea(AppClient *client, cairo_t *cr, Container *container) {
     // SHOW TEXT LAYOUT
     set_argb(cr, data->color);
     
-    //cairo_move_to(cr, container->real_bounds.x, container->real_bounds.y);
+    cairo_move_to(cr, container->real_bounds.x, container->real_bounds.y);
     
     // TODO: this 0, 0 position is wrong for cairo and makes is draw the cursor in the wrong spot
     // The problem is that the texts are different widths
-    draw_text(client, data->font_size, config->font, EXPAND(data->color), data->state->text, container->real_bounds, 5, 0, 0);
+    //draw_text(client, data->font_size, config->font, EXPAND(data->color), data->state->text, container->real_bounds, 5, 0, 0);
     
-    //pango_cairo_show_layout(cr, layout);
-    //pango_layout_set_alignment(layout, PangoAlignment::PANGO_ALIGN_LEFT);
+    pango_cairo_show_layout(cr, layout);
+    pango_layout_set_alignment(layout, PangoAlignment::PANGO_ALIGN_LEFT);
     
     if (container->parent->active == false && data->state->text.empty()) {
          draw_text(client, data->font_size, config->font, EXPAND(data->color_prompt), data->state->prompt, container->real_bounds, 5, 0, 0);
@@ -2994,3 +2995,5 @@ void paint_reordable_item(AppClient *client, cairo_t *cr, Container *container) 
     rounded_rect(client, 4 * config->dpi, container->real_bounds.x, container->real_bounds.y, container->real_bounds.w,
                  container->real_bounds.h, color, std::floor(1 * config->dpi));
 }
+
+TextAreaSettings::TextAreaSettings(float scale) : ScrollPaneSettings(scale) {}
