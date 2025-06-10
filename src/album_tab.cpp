@@ -6,6 +6,7 @@
 #endif
 
 
+#include <cstring>
 #include "album_tab.h"
 #include "drawer.h"
 #include "components.h"
@@ -38,7 +39,85 @@ struct AlbumsScrollRootData : UserData {
     cairo_surface_t *unknown_album_icon = nullptr;
     cairo_surface_t *volume_icon = nullptr;
     ArgbColor volume_color = ArgbColor(1, 0, 1, 0);
+    
+    cairo_surface_t *shadow_surface = nullptr;
 };
+
+static float shadow_size = 20.0f;
+
+void gaussian_blur(cairo_surface_t *surface, int radius) {
+    if (radius < 1) return;
+    
+    int width = cairo_image_surface_get_width(surface);
+    int height = cairo_image_surface_get_height(surface);
+    unsigned char *data = cairo_image_surface_get_data(surface);
+    int stride = cairo_image_surface_get_stride(surface);
+    
+    int kernel_size = 2 * radius + 1;
+    float *kernel = new float[kernel_size];
+    float sigma = radius / 2.0f;
+    float sum = 0.0f;
+    
+    // Create Gaussian kernel
+    for (int i = 0; i < kernel_size; ++i) {
+        float x = i - radius;
+        kernel[i] = std::exp(-(x * x) / (2 * sigma * sigma));
+        sum += kernel[i];
+    }
+    for (int i = 0; i < kernel_size; ++i) kernel[i] /= sum;
+    
+    // Temp buffer
+    unsigned char *temp = new unsigned char[height * stride];
+    std::memcpy(temp, data, height * stride);
+    
+    // Horizontal pass
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            float a = 0, r = 0, g = 0, b = 0;
+            for (int k = -radius; k <= radius; ++k) {
+                int sx = std::clamp(x + k, 0, width - 1);
+                unsigned char *src = temp + y * stride + sx * 4;
+                float w = kernel[k + radius];
+                b += src[0] * w;
+                g += src[1] * w;
+                r += src[2] * w;
+                a += src[3] * w;
+            }
+            unsigned char *dst = data + y * stride + x * 4;
+            dst[0] = (unsigned char)b;
+            dst[1] = (unsigned char)g;
+            dst[2] = (unsigned char)r;
+            dst[3] = (unsigned char)a;
+        }
+    }
+    
+    std::memcpy(temp, data, height * stride);
+    
+    // Vertical pass
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            float a = 0, r = 0, g = 0, b = 0;
+            for (int k = -radius; k <= radius; ++k) {
+                int sy = std::clamp(y + k, 0, height - 1);
+                unsigned char *src = temp + sy * stride + x * 4;
+                float w = kernel[k + radius];
+                b += src[0] * w;
+                g += src[1] * w;
+                r += src[2] * w;
+                a += src[3] * w;
+            }
+            unsigned char *dst = data + y * stride + x * 4;
+            dst[0] = (unsigned char)b;
+            dst[1] = (unsigned char)g;
+            dst[2] = (unsigned char)r;
+            dst[3] = (unsigned char)a;
+        }
+    }
+    
+    delete[] kernel;
+    delete[] temp;
+    cairo_surface_mark_dirty(surface);
+}
 
 // {"anchors":[{"x":0,"y":0},{"x":0.30000000000000004,"y":0.025},{"x":0.55,"y":0.65},{"x":0.8,"y":0.025},{"x":1.175,"y":0},{"x":1.475,"y":0},{"x":1.6,"y":0}],"controls":[{"x":0.13902586932059735,"y":-0.6309350297566491},{"x":0.3976797154744436,"y":0.6358163698120345},{"x":0.7074444613334461,"y":0.5893040637251854},{"x":0.9851797154744433,"y":-0.36698467773927074},{"x":1.327487407782136,"y":0.05863743461861286},{"x":1.5375,"y":0}]}
 std::vector<float> fls = { 1, 1.071, 1.1320000000000001, 1.183, 1.226, 1.259, 1.284, 1.3, 1.308, 1.308, 1.3, 1.285, 1.262, 1.231, 1.194, 1.149, 1.098, 1.04, 0.975, 0.877, 0.792, 0.716, 0.65, 0.593, 0.5429999999999999, 0.5, 0.46399999999999997, 0.43300000000000005, 0.40800000000000003, 0.388, 0.372, 0.361, 0.353, 0.35, 0.358, 0.369, 0.384, 0.402, 0.42400000000000004, 0.44999999999999996, 0.481, 0.518, 0.5589999999999999, 0.607, 0.663, 0.726, 0.798, 0.88, 0.975, 1.009, 1.039, 1.067, 1.091, 1.113, 1.131, 1.146, 1.158, 1.168, 1.174, 1.177, 1.177, 1.174, 1.168, 1.16, 1.148, 1.133, 1.116, 1.095, 1.071, 1.045, 1.016, 0.997, 0.991, 0.986, 0.982, 0.978, 0.975, 0.973, 0.972, 0.971, 0.971, 0.971, 0.973, 0.975, 0.978, 0.981, 0.986, 0.991, 0.997, 1, 1, 1, 1, 1, 1, 1, 1 };
@@ -942,7 +1021,19 @@ void fill_album_tab(AppClient *client, Container *albums_root, const std::vector
             load_icon_full_path(app, client, &data->volume_icon, asset("volume.png"), 16 * config->dpi);
             dye_surface(data->volume_icon, ArgbColor(.5, .5, .5, 1));
         }
-                
+        if (!data->shadow_surface) {
+            data->shadow_surface = accelerated_surface(app, client, album_target_width + shadow_size * 2 , album_target_width + shadow_size * 2);
+            auto tmp_cr = cairo_create(data->shadow_surface);
+            
+            set_argb(tmp_cr, ArgbColor(0, 0, 0, .33));
+            set_rect(tmp_cr, Bounds(shadow_size, shadow_size, album_target_width, album_target_width));
+            cairo_fill(tmp_cr);
+            gaussian_blur(data->shadow_surface, shadow_size);
+            
+            cairo_destroy(tmp_cr);
+        }
+        
+        
         bool have_time = true;
         for (auto c: data->containers) {
             auto data = (AlbumData *) c->user_data;
@@ -1121,10 +1212,20 @@ void fill_album_tab(AppClient *client, Container *albums_root, const std::vector
                     cairo_scale(client->cr, scale, scale);
                     float shrink = 1.0 / scale;
                     
-                    cairo_set_source_surface(cr, data->surface, 
-                                                 (c->real_bounds.x + c->real_bounds.w * .5 - width * .5 - ((width * scale - width) * .5)) * shrink,
-                                                 (c->real_bounds.y + top_offset - ((width * scale - width)) * .5) * shrink);
-                    cairo_paint(cr); 
+                    float x = std::round(c->real_bounds.x + c->real_bounds.w * .5 - width * .5 - ((width * scale - width) * .5)) * shrink;
+                    float y = std::round(c->real_bounds.y + top_offset - ((width * scale - width)) * .5) * shrink;
+                    
+                    {
+                        auto a_data = (AlbumsScrollRootData *) container_by_name("albums_root", client->root)->user_data;
+                        cairo_set_source_surface(cr, a_data->shadow_surface, x - shadow_size, y - shadow_size);
+                        cairo_paint(cr);
+                    }
+                    
+                    cairo_set_source_surface(cr, data->surface,x,y);
+                    cairo_paint(cr);
+                    
+                    //draw_margins_rect(client, ArgbColor(.7, .7, .7, .4), Bounds(x, y, width, width), std::round(1 * config->dpi), 0);
+                    
                     cairo_restore(cr);
                 } else {
                     draw_round_rect(client, ArgbColor(0.878, 0.898, 0.914, 1.0), picture_bounds, 3 * config->dpi);
