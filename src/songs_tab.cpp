@@ -11,6 +11,8 @@
 #include "config.h"
 #include "drawer.h"
 #include "components.h"
+#define FTS_FUZZY_MATCH_IMPLEMENTATION
+#include "fts_fuzzy_match.h"
 #include "ThreadPool.h"
 #include <filesystem>
 #include <fstream>
@@ -767,8 +769,8 @@ void fill_songs_tab(AppClient *client, Container *songs_root, std::vector<Option
                     bool first = true;
                     for (auto child: c->children) {
                         auto data = (ListOption *) child->user_data;
-                        child->exists = data->title_all_lower.find(needle) != std::string::npos;
-                        data->selected =false;
+                        child->exists = fts::fuzzy_match_simple(needle.c_str(), data->title.c_str());
+                        data->selected = false;
                         if (first && child->exists) { // When you type in a new filter query, it auto selects first
                             first = false;
                             data->selected = true;

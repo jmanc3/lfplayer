@@ -2339,6 +2339,12 @@ textarea_handle_keypress(AppClient *client, Container *textarea, bool is_string,
             if (control) {
             
             }
+        } else if (keysym == XKB_KEY_x) {
+            if (control) {
+                if (data->state->selection_x != -1) {
+                    replace_action(client, textarea, data, "");
+                }
+            }
         } else if (keysym == XKB_KEY_v) {
             std::string text = clipboard();
             if (data->single_line) {

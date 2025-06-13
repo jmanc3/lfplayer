@@ -95,11 +95,11 @@ struct Player {
     
     void play_last(std::string track_path);
     
-    void album_play_next(std::string track_path, int from_index = 0);
+    void album_play_next(std::string album_name, int from_index = 0);
     
-    void album_play_after_all_next(std::string track_path, int from_index = 0);
+    void album_play_after_all_next(std::string album_name, int from_index = 0);
     
-    void album_play_last(std::string track_path, int from_index = 0);
+    void album_play_last(std::string album_name, int from_index = 0);
     
     void clear_queue();
     

@@ -15,6 +15,8 @@
 #include "utility.h"
 #include "player.h"
 #include "edit_info.h"
+#define FTS_FUZZY_MATCH_IMPLEMENTATION
+#include "fts_fuzzy_match.h"
 
 struct AlbumSong : UserData {
     Option data;
@@ -1325,21 +1327,24 @@ void fill_album_tab(AppClient *client, Container *albums_root, const std::vector
     albums_scroll_root->content->type = ::absolute;
     albums_scroll_root->content->pre_layout = [](AppClient *client, Container *c, const Bounds &b) {
         // Set d->exists based on if it matches against non empty search string
-        /*
+
         if (auto filter_textarea = container_by_name("filter_textarea", client->root)) {
             auto data = (TextAreaData *) filter_textarea->user_data;
             if (!data->state->text.empty()) {
                 for (auto d: c->children) {
                     auto al = (AlbumData *) d->user_data;
-                    if (al->option.album.find(data->state->text) != std::string::npos) {
-                        d->exists = true;
+                    if (al) {
+                        d->exists = fts::fuzzy_match_simple(data->state->text.c_str(), al->option.album.c_str());
                     } else {
                         d->exists = false;
                     }
                 }
+            } else {
+                for (auto d: c->children) {
+                    d->exists = true;
+                }
             }
         }
-        */
 
         static double scroll_to = 0;
         static double target_y = 0;

@@ -602,6 +602,8 @@ static void paint_textarea_border(AppClient *client, cairo_t *cr, Container *con
         auto data = (TextAreaData *) container->children[0]->user_data;
         if (!data->state->text.empty()) {
             data->state->text = "";
+            data->state->cursor = 0;
+            data->state->selection_x = -1;
             for (auto child: container->children[0]->children) {
                 auto data = (ListOption *) child->user_data;
                 //data->selected = false;
@@ -1087,7 +1089,21 @@ static void fill_root(AppClient *client) {
                 return;
             }
         }
-        
+        if (keysym == XK_Tab) {
+            if (direction == XKB_KEY_DOWN) {
+                if (active_tab == 0) {
+                    active_tab = 1;
+                    config->starting_tab_index = active_tab;
+                    client_layout(app, client);
+                } else {
+                    active_tab = 0;
+                    config->starting_tab_index = active_tab;
+                    client_layout(app, client);
+                }
+            }
+            return;
+        }
+
         if (direction == XKB_KEY_DOWN && keysym == XK_Return) {
             player->play_track(get_selected_track(client));
         }
@@ -1324,19 +1340,51 @@ static void fill_root(AppClient *client) {
     textarea_settings.single_line = true;
     textarea_settings.bottom_show_amount = 2;
     textarea_settings.right_show_amount = 2;
-    textarea_settings.font_size__ = 13 * config->dpi;
+    textarea_settings.font_size__ = 11 * config->dpi;
+    textarea_settings.prompt = "Search Library";
     textarea_settings.color = config->color_pinned_icon_editor_field_default_text;
+    auto prompt_color = textarea_settings.color;
+    prompt_color.a *= .4;
+    textarea_settings.color_prompt = prompt_color;
     textarea_settings.color_cursor = config->color_pinned_icon_editor_cursor;
-    textarea_settings.pad = Bounds(20 * config->dpi, 3 * config->dpi, 40 * config->dpi, 0);
+    textarea_settings.pad = Bounds(40 * config->dpi, 5 * config->dpi, 0, 0);
     
 
     auto textarea = make_textarea(app, client, vol, textarea_settings);
+    textarea->parent->after_paint = [](AppClient *client, cairo_t *cr, Container *c) {
+        static cairo_surface_t *surface = nullptr;
+        static bool attempted = false;
+        if (!attempted) {
+            attempted = true;
+            load_icon_full_path(app, client, &surface, asset("search.png"), 16 * config->dpi);
+            dye_surface(surface, ArgbColor(.3, .3, .3, 1.0));
+        }
+        if (surface) {
+            int h = cairo_image_surface_get_height(surface);
+            cairo_set_source_surface(cr, surface, c->real_bounds.x + 14 * config->dpi, c->real_bounds.y + c->real_bounds.h * .5 - ((float) (h)) * .5);
+            cairo_paint_with_alpha(cr, .6);
+        }
+    };
     textarea->when_key_event = [](AppClient *client, cairo_t *cr, Container *self, bool is_string,
                                   xkb_keysym_t keysym, char string[64], uint16_t mods,
                                   xkb_key_direction direction) {
         if (!self->active && !self->parent->active)
             return;
         
+        if (keysym == XK_Tab) {
+            if (direction == XKB_KEY_DOWN) {
+                if (active_tab == 0) {
+                    active_tab = 1;
+                    config->starting_tab_index = active_tab;
+                    client_layout(app, client);
+                } else {
+                    active_tab = 0;
+                    config->starting_tab_index = active_tab;
+                    client_layout(app, client);
+                }
+            }
+            return;
+        }
         if (direction == XKB_KEY_DOWN) {
             if (keysym == XK_Escape) {
                 if (auto filter_textarea = container_by_name("filter_textarea", client->root)) {
@@ -1344,6 +1392,7 @@ static void fill_root(AppClient *client) {
                     filter_textarea->parent->active = false;
                     data->state->text = "";
                     data->state->cursor = 0;
+                    data->state->selection_x = -1;
                     client_layout(app, client);
                     request_refresh(app, client);
                     put_selected_on_screen(client);
@@ -1352,7 +1401,22 @@ static void fill_root(AppClient *client) {
             }
     
             if (keysym == XK_Return) {
-                player->play_track(get_selected_track(client));
+                if (active_tab == 0) { // On songs page
+                    player->play_track(get_selected_track(client));
+                } else if (active_tab == 1) { // On albums page
+                    if (auto c = (ScrollContainer *) container_by_name("albums_root", client->root)) {
+                        for (auto child  : c->content->children) {
+                            if (child->exists) {
+                                auto al = (AlbumData *) child->user_data;
+                                if (al) {
+                                    player->album_play_next(al->option.album);
+                                    player->pop_queue();
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
         
